@@ -107,6 +107,16 @@ const Devices = () => {
                 >
                   Scan
                 </button>
+
+                <button
+                  className="action-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/apps/${agent.agentId}`);
+                  }}
+                >
+                  Installed Apps
+                </button>
               </div>
             </div>
           ))}

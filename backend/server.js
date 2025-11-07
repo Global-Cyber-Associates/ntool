@@ -4,10 +4,10 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { Server } from "socket.io";
-
 import { connectMongo } from "./db.js";
 import { saveAgentData } from "./save.js";
 import * as GetData from "./get.js";
+import authRoutes from "./api/auth.js";
 
 const configPath = path.resolve("./config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -17,6 +17,9 @@ const SOCKET_PORT = config.socket_port || 5000;
 
 const app = express();
 app.use(cors({ origin: CORS_ORIGIN }));
+app.use(express.json());
+app.use("/api/auth", authRoutes);
+
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", ts: new Date().toISOString() })
 );
@@ -27,13 +30,11 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log(`⚡ Client connected: ${socket.id}`);
+  console.log(`Client connected: ${socket.id}`);
 
-  // 🔹 Agent sends data to save
   socket.on("agent_data", async (payload) => {
     try {
       if (!payload?.type || !payload?.data || !payload?.agentId) {
-        console.warn("⚠️ Invalid payload received:", payload);
         return socket.emit("agent_response", {
           success: false,
           message: "Invalid payload format",
@@ -44,7 +45,7 @@ io.on("connection", (socket) => {
         socket.handshake.address ||
         (socket.handshake.headers["x-forwarded-for"]?.split(",")[0] || "unknown");
 
-      console.log(`📥 Received [${payload.type}] from agent ${payload.agentId} (${payload.ip})`);
+      console.log(`Received [${payload.type}] from agent ${payload.agentId} (${payload.ip})`);
 
       await saveAgentData(payload);
 
@@ -53,7 +54,7 @@ io.on("connection", (socket) => {
         message: `${payload.type} saved successfully`,
       });
     } catch (err) {
-      console.error("❌ Error saving agent data:", err);
+      console.error("Error saving agent data:", err);
       socket.emit("agent_response", {
         success: false,
         message: "Failed to save agent data",
@@ -62,13 +63,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  // 🔹 Client requests data (REST-style response)
   socket.on("get_data", async (params, callback) => {
     try {
       const result = await GetData.fetchData(params);
-      callback(result); // result already has success, message, data
+      callback(result);
     } catch (err) {
-      console.error("❌ Error fetching data:", err);
+      console.error("Error fetching data:", err);
       callback({
         success: false,
         message: "Failed to fetch data",
@@ -79,20 +79,20 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", (reason) => {
-    console.log(`🔌 Client disconnected: ${socket.id} (${reason})`);
+    console.log(`Client disconnected: ${socket.id} (${reason})`);
   });
 });
 
 async function start() {
   try {
     await connectMongo(config.mongo_uri);
-    console.log("✅ MongoDB connected");
+    console.log("MongoDB connected");
 
     server.listen(SOCKET_PORT, "0.0.0.0", () => {
-      console.log(`✅ Socket Server running on port ${SOCKET_PORT}`);
+      console.log(`Socket + REST Server running on port ${SOCKET_PORT}`);
     });
   } catch (err) {
-    console.error("❌ Failed to start server:", err);
+    console.error("Failed to start server:", err);
     process.exit(1);
   }
 }

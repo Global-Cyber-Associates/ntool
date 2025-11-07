@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import socket from "../../../utils/socket.js";
+import InstalledApps from "../installedApps/installedapps.jsx";
 import "./deviceControl.css";
 
 const bytesToGB = (bytes) => (bytes / 1024 ** 3).toFixed(2);
@@ -79,12 +80,6 @@ const DeviceDetail = () => {
 
       <div className="pc-section collected">
         <p><strong>Collected:</strong> {new Date(collected).toLocaleString()}</p>
-      </div>
-
-      <div className="device-actions">
-        <button className="action-btn" onClick={() => alert(`Disconnect ${device.hostname}`)}>Disconnect</button>
-        <button className="action-btn" onClick={() => navigate(`/tasks/${id}`)}>Task Manager</button>
-        <button className="action-btn" onClick={() => alert(`Scan ${device.hostname}`)}>Scan</button>
       </div>
     </div>
   );
