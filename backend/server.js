@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 
 import { connectMongo } from "./db.js";
 import { saveAgentData } from "./save.js";
-import * as GetData from "./get.js"; // fetchData
+import * as GetData from "./get.js";
 
 const configPath = path.resolve("./config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -29,11 +29,15 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log(`⚡ Client connected: ${socket.id}`);
 
+  // 🔹 Agent sends data to save
   socket.on("agent_data", async (payload) => {
     try {
       if (!payload?.type || !payload?.data || !payload?.agentId) {
         console.warn("⚠️ Invalid payload received:", payload);
-        return;
+        return socket.emit("agent_response", {
+          success: false,
+          message: "Invalid payload format",
+        });
       }
 
       payload.ip =
@@ -41,19 +45,36 @@ io.on("connection", (socket) => {
         (socket.handshake.headers["x-forwarded-for"]?.split(",")[0] || "unknown");
 
       console.log(`📥 Received [${payload.type}] from agent ${payload.agentId} (${payload.ip})`);
+
       await saveAgentData(payload);
+
+      socket.emit("agent_response", {
+        success: true,
+        message: `${payload.type} saved successfully`,
+      });
     } catch (err) {
       console.error("❌ Error saving agent data:", err);
+      socket.emit("agent_response", {
+        success: false,
+        message: "Failed to save agent data",
+        error: err.message,
+      });
     }
   });
 
+  // 🔹 Client requests data (REST-style response)
   socket.on("get_data", async (params, callback) => {
     try {
       const result = await GetData.fetchData(params);
-      callback(result);
+      callback(result); // result already has success, message, data
     } catch (err) {
       console.error("❌ Error fetching data:", err);
-      callback({ error: "Failed to fetch data" });
+      callback({
+        success: false,
+        message: "Failed to fetch data",
+        error: err.message,
+        data: [],
+      });
     }
   });
 
