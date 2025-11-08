@@ -1,3 +1,7 @@
+*{
+  user-select: none;
+}
+
 .V-container {
   position: relative;
   height: 100%;
@@ -52,7 +56,8 @@
 
 .V-device-box {
   background: rgba(255, 255, 255, 0);
-  border-radius: 12px;
+  border-radius: 5px;
+  width: 80px;
   text-align: center;
   padding: 10px;
   color: #e2e8f0;
@@ -71,7 +76,7 @@
 
 .V-device-box:hover {
   transform: scale(1.05);
-  box-shadow: 0 0 14px rgba(0, 255, 255, 0.4);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
 }
 
 .V-device-icon {
@@ -81,12 +86,12 @@
 }
 
 .V-device-name {
-  font-size: 6px;
+  font-size: 8px;
   color: #cbd5e1;
 }
 
 .V-device-ip {
-  font-size: 12px;
+  font-size: 10px;
   color: #a8dadc;
   margin-top: 4px;
   opacity: 0.9;

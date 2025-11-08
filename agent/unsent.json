@@ -1,0 +1,138 @@
+[
+    {
+        "timestamp": "2025-11-08T14:03:39.898529",
+        "agentId": "sugumar",
+        "type": "system_info",
+        "data": {
+            "agent_id": "DESKTOP-FC89P9P",
+            "hostname": "DESKTOP-FC89P9P",
+            "os_type": "Windows",
+            "os_version": "10.0.26200",
+            "os_release": "11",
+            "cpu": {
+                "physical_cores": 8,
+                "logical_cores": 16,
+                "cpu_freq_mhz": 2901.0
+            },
+            "memory": {
+                "total_ram": 7968243712,
+                "available_ram": 1151913984,
+                "used_ram": 6816329728,
+                "ram_percent": 85.5
+            },
+            "disk": {
+                "C:\\": {
+                    "mountpoint": "C:\\",
+                    "fstype": "NTFS",
+                    "total": 275158921216,
+                    "used": 268128489472,
+                    "free": 7030431744,
+                    "percent": 97.4
+                },
+                "D:\\": {
+                    "mountpoint": "D:\\",
+                    "fstype": "NTFS",
+                    "total": 236013481984,
+                    "used": 226869338112,
+                    "free": 9144143872,
+                    "percent": 96.1
+                }
+            },
+            "users": [
+                "Jayanth K"
+            ],
+            "machine_id": "244416032970936",
+            "wlan_info": [
+                {
+                    "interface_name": "WiFi",
+                    "type": "IPv4",
+                    "address": "10.83.143.206",
+                    "netmask": "255.255.255.0",
+                    "broadcast": null
+                }
+            ],
+            "ip": "10.83.143.206"
+        }
+    },
+    {
+        "timestamp": "2025-11-08T14:03:46.494897",
+        "agentId": "sugumar",
+        "type": "port_scan",
+        "data": {
+            "target": "127.0.0.1",
+            "open_ports": [
+                135,
+                445
+            ],
+            "scanned_range": "1-1024"
+        }
+    },
+    {
+        "timestamp": "2025-11-08T14:04:11.715637",
+        "agentId": "sugumar",
+        "type": "system_info",
+        "data": {
+            "agent_id": "DESKTOP-FC89P9P",
+            "hostname": "DESKTOP-FC89P9P",
+            "os_type": "Windows",
+            "os_version": "10.0.26200",
+            "os_release": "11",
+            "cpu": {
+                "physical_cores": 8,
+                "logical_cores": 16,
+                "cpu_freq_mhz": 2901.0
+            },
+            "memory": {
+                "total_ram": 7968243712,
+                "available_ram": 919269376,
+                "used_ram": 7048974336,
+                "ram_percent": 88.5
+            },
+            "disk": {
+                "C:\\": {
+                    "mountpoint": "C:\\",
+                    "fstype": "NTFS",
+                    "total": 275158921216,
+                    "used": 268139458560,
+                    "free": 7019462656,
+                    "percent": 97.4
+                },
+                "D:\\": {
+                    "mountpoint": "D:\\",
+                    "fstype": "NTFS",
+                    "total": 236013481984,
+                    "used": 226869338112,
+                    "free": 9144143872,
+                    "percent": 96.1
+                }
+            },
+            "users": [
+                "Jayanth K"
+            ],
+            "machine_id": "244416032970936",
+            "wlan_info": [
+                {
+                    "interface_name": "WiFi",
+                    "type": "IPv4",
+                    "address": "10.83.143.206",
+                    "netmask": "255.255.255.0",
+                    "broadcast": null
+                }
+            ],
+            "ip": "10.83.143.206"
+        }
+    },
+    {
+        "timestamp": "2025-11-08T14:04:18.291118",
+        "agentId": "sugumar",
+        "type": "port_scan",
+        "data": {
+            "target": "127.0.0.1",
+            "open_ports": [
+                135,
+                445
+            ],
+            "scanned_range": "1-1024"
+        }
+    }
+]

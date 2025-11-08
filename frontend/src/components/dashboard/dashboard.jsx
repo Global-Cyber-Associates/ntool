@@ -1,70 +1,67 @@
 import React, { useEffect, useState } from "react";
 import "./dashboard.css";
 import Sidebar from "../navigation/sidenav.jsx";
-
-const backendUrl = import.meta.env.VITE_BACKEND_URL;
+import { fetchData } from "../../utils/socket.js";
 
 const Dashboard = () => {
   const [visualizerData, setVisualizerData] = useState([]);
   const [systemInfo, setSystemInfo] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch all data from socket
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [vizRes, sysRes, logRes] = await Promise.all([
+        fetchData("visualizerData"),
+        fetchData("system_info"),
+        fetchData("system_logs"),
+      ]);
+
+      // Deduplicate visualizer by agentId to get latest scan per agent
+      const latestVisualizer = Object.values(
+        (vizRes.data || []).reduce((acc, d) => {
+          if (
+            !acc[d.agentId] ||
+            new Date(d.createdAt) > new Date(acc[d.agentId].createdAt)
+          ) {
+            acc[d.agentId] = d;
+          }
+          return acc;
+        }, {})
+      );
+
+      setVisualizerData(latestVisualizer);
+      setSystemInfo(sysRes.data || []);
+      setLogs(logRes.data || []);
+    } catch (err) {
+      console.error("Socket fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [vizRes, sysRes] = await Promise.all([
-          fetch(`${backendUrl}/visualizer-data`),
-          fetch(`${backendUrl}/system`),
-        ]);
-
-        if (!vizRes.ok || !sysRes.ok) throw new Error("Failed to fetch data");
-
-        const [vizData, sysData] = await Promise.all([
-          vizRes.json(),
-          sysRes.json(),
-        ]);
-
-        // Group visualizer by latest per IP
-        const latestVisualizer = Object.values(
-          vizData.reduce((acc, d) => {
-            if (!acc[d.ip] || new Date(d.createdAt) > new Date(acc[d.ip].createdAt)) {
-              acc[d.ip] = d;
-            }
-            return acc;
-          }, {})
-        );
-
-        setVisualizerData(latestVisualizer);
-        setSystemInfo(sysData);
-      } catch (err) {
-        console.error("Error fetching:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 60000); // auto-refresh every minute
+    loadData();
+    const interval = setInterval(loadData, 60000); // refresh every minute
     return () => clearInterval(interval);
   }, []);
 
-  // Extract agent IPs from systeminfo
-  const agentIPs = systemInfo.map(
-    (sys) => sys.wlan_ip?.[0]?.address || null
-  ).filter(Boolean);
-
-  // Find active agent devices (seen in network scan)
-  const activeAgents = visualizerData.filter(
-    (d) => !d.noAgent && agentIPs.includes(d.ip)
+  // KPI calculations
+  const activeAgents = visualizerData.filter(d =>
+    !d.noAgent && systemInfo.some(s => s.agentId === d.agentId)
   );
 
-  // Find inactive agent devices (agent exists, but missing from scan)
   const inactiveAgents = systemInfo.filter(
-    (sys) => !visualizerData.some((v) => v.ip === sys.wlan_ip?.[0]?.address)
+    s => !visualizerData.some(d => d.agentId === s.agentId)
   );
 
-  // Non-agent (unmanaged) devices
-  const unmanagedDevices = visualizerData.filter((d) => d.noAgent === true);
+  const unmanagedDevices = visualizerData.filter(d => d.noAgent);
+
+  const logsToday = logs.filter(
+    l => new Date(l.timestamp).toDateString() === new Date().toDateString()
+  ).length;
 
   return (
     <div className="dashboard">
@@ -110,19 +107,21 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeAgents.map((d) => {
-                    const sys = systemInfo.find(
-                      (s) => s.wlan_ip?.[0]?.address === d.ip
-                    );
+                  {activeAgents.map(d => {
+                    const sys = systemInfo.find(s => s.agentId === d.agentId);
                     return (
-                      <tr key={d.ip}>
+                      <tr key={d.agentId}>
                         <td>{sys?.hostname || "-"}</td>
                         <td>{d.ip}</td>
                         <td>{sys?.cpu?.logical_cores || "-"}</td>
-                        <td>{sys?.memory?.ram_percent
-                          ? sys.memory.ram_percent + "%"
-                          : "-"}</td>
-                        <td>{sys?.os_type} {sys?.os_release}</td>
+                        <td>
+                          {sys?.memory?.ram_percent
+                            ? sys.memory.ram_percent + "%"
+                            : "-"}
+                        </td>
+                        <td>
+                          {sys?.os_type} {sys?.os_release}
+                        </td>
                       </tr>
                     );
                   })}
@@ -143,11 +142,13 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {inactiveAgents.map((sys) => (
-                    <tr key={sys._id}>
+                  {inactiveAgents.map(sys => (
+                    <tr key={sys.agentId}>
                       <td>{sys.hostname}</td>
                       <td>{sys.wlan_ip?.[0]?.address || "-"}</td>
-                      <td>{sys.os_type} {sys.os_release}</td>
+                      <td>
+                        {sys.os_type} {sys.os_release}
+                      </td>
                       <td>{new Date(sys.collected_at).toLocaleString()}</td>
                     </tr>
                   ))}
@@ -167,7 +168,7 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {unmanagedDevices.map((d) => (
+                  {unmanagedDevices.map(d => (
                     <tr key={d._id}>
                       <td>{d.ip}</td>
                       <td>{d.mac}</td>

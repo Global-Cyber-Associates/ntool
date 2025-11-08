@@ -4,6 +4,7 @@ import InstalledApps from "./models/InstalledApps.js";
 import USBDevice from "./models/UsbDevices.js";
 import PortScanData from "./models/PortScan.js";
 import TaskInfo from "./models/TaskInfo.js";
+import VisualizerData from "./models/VisualizerData.js"; // <-- imported
 
 export async function fetchData({ type, agentId }) {
   try {
@@ -27,8 +28,10 @@ export async function fetchData({ type, agentId }) {
       case "task_info":
         Model = TaskInfo;
         break;
+      case "visualizer_data": // <-- new case
+        Model = VisualizerData;
+        break;
       case "agents":
-        console.log("➡ Fetching all agents...");
         const agents = await Agent.find({});
         console.log(`✅ Found ${agents.length} agents`);
         return {
@@ -61,7 +64,6 @@ export async function fetchData({ type, agentId }) {
       }
 
       if (type === "task_info") {
-        console.log("🔧 Combining task_info with system_info...");
         const systemInfo = await SystemInfo.findOne({ agentId }).sort({ timestamp: -1 });
         const combined = {
           agentId: doc.agentId,
@@ -75,17 +77,13 @@ export async function fetchData({ type, agentId }) {
           data: doc.data,
           timestamp: doc.timestamp,
         };
-
-        console.log(`✅ Combined task_info result for ${agentId}:`, JSON.stringify(combined, null, 2));
         result = [combined];
       } else {
-        console.log(`✅ Found ${type} document for ${agentId}`);
         result = [doc];
       }
     } else {
       console.log(`📋 Fetching all ${type} records...`);
       result = await Model.find({});
-      console.log(`✅ Found ${result.length} records`);
     }
 
     console.log(`📤 Returning ${type} data for ${agentId || "ALL"}`);

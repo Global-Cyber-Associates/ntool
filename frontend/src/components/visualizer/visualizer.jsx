@@ -2,29 +2,23 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../navigation/sidenav.jsx";
 import FloorManager from "./view/FloorManager.jsx";
 import FloorGrid from "./view/FloorGrid.jsx";
+import socket, { fetchData } from "../../utils/socket.js"; // <-- import socket
 import "./visualizer.css";
-
-const backendUrl = import.meta.env.VITE_BACKEND_URL;
-console.log("Backend URL:", import.meta.env.VITE_BACKEND_URL);
-
 
 export default function Visualizer() {
   const [floors, setFloors] = useState([{ id: 1, name: "Floor 1", devices: [] }]);
   const [activeFloor, setActiveFloor] = useState(1);
   const [loading, setLoading] = useState(false);
 
-
-  // ✅ Fetch devices from API once
+  // ✅ Fetch devices via socket
   useEffect(() => {
-    const fetchDevices = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${backendUrl}/visualizer-data`);
-        const data = await res.json(); 
-        if (!Array.isArray(data)) return;
+    setLoading(true);
 
-        // Map API response into visualizer devices
-        const fetchedDevices = data.map((d, i) => ({
+    fetchData("visualizer_data")
+      .then((res) => {
+        if (!res?.data || !Array.isArray(res.data)) return;
+
+        const fetchedDevices = res.data.map((d, i) => ({
           id: i + 1,
           name: d.hostname || "Unknown",
           ip: d.ip || "N/A",
@@ -35,16 +29,30 @@ export default function Visualizer() {
           y: Math.floor(i / 6) * 120,
         }));
 
-        // Assign to floor 1
         setFloors([{ id: 1, name: "Floor 1", devices: fetchedDevices }]);
-      } catch (err) {
-        console.error("❌ Failed to fetch devices:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      })
+      .catch((err) => console.error("❌ Failed to fetch devices:", err))
+      .finally(() => setLoading(false));
 
-    fetchDevices();
+    // Optional: listen for real-time updates
+    socket.on("visualizer_update", (deviceUpdate) => {
+      setFloors((prev) =>
+        prev.map((f) =>
+          f.id === 1
+            ? {
+                ...f,
+                devices: f.devices.map((d) =>
+                  d.ip === deviceUpdate.ip ? { ...d, ...deviceUpdate } : d
+                ),
+              }
+            : f
+        )
+      );
+    });
+
+    return () => {
+      socket.off("visualizer_update");
+    };
   }, []);
 
   const addFloor = () => {
@@ -62,7 +70,6 @@ export default function Visualizer() {
   return (
     <div className="visualizer-page">
       <Sidebar />
-
       <div className="visualizer-wrap">
         <div className="visualizer-header">
           <h1>Network Floor Visualizer</h1>
