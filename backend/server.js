@@ -4,10 +4,15 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { Server } from "socket.io";
+import mongoose from "mongoose";
+
 import { connectMongo } from "./db.js";
 import { saveAgentData } from "./save.js";
 import * as GetData from "./get.js";
-import authRoutes from "./api/auth.js";
+
+// ✅ Visualizer-only imports
+import visualizerDataRoute from "./api/visualizerData.js";
+import "./visualizer-script/visualizerScanner.js";
 
 const configPath = path.resolve("./config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -18,12 +23,20 @@ const SOCKET_PORT = config.socket_port || 5000;
 const app = express();
 app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
-app.use("/api/auth", authRoutes);
+//app.use("/api/auth", authRoutes);
 
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", ts: new Date().toISOString() })
 );
 
+// ---------------------------
+// 🔹 Visualizer Route
+// ---------------------------
+app.use("/api/visualizer-data", visualizerDataRoute);
+
+// ---------------------------
+// 🔹 Socket.IO Setup
+// ---------------------------
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: CORS_ORIGIN, methods: ["GET", "POST"] },
@@ -83,13 +96,17 @@ io.on("connection", (socket) => {
   });
 });
 
+// ---------------------------
+// 🔹 Start Server
+// ---------------------------
 async function start() {
   try {
     await connectMongo(config.mongo_uri);
     console.log("MongoDB connected");
 
     server.listen(SOCKET_PORT, "0.0.0.0", () => {
-      console.log(`Socket + REST Server running on port ${SOCKET_PORT}`);
+      console.log(`✅ Socket Server running on port ${SOCKET_PORT}`);
+      console.log("🧠 Continuous scanner + visualizer loop active");
     });
   } catch (err) {
     console.error("Failed to start server:", err);
