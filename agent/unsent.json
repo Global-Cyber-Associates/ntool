@@ -134,5 +134,90 @@
             ],
             "scanned_range": "1-1024"
         }
+    },
+    {
+        "timestamp": "2025-11-09T13:34:40.490271",
+        "agentId": "sugumar",
+        "type": "usb_devices",
+        "data": {
+            "status": "ejected",
+            "device": {
+                "drive_letter": "E",
+                "vendor_id": "USBSTOR\\DISK&VEN_GENERIC&PROD_MASS_STORAGE&REV_1.99\\D88F46AD7AA752D4&0",
+                "product_id": "\\\\.\\PHYSICALDRIVE1",
+                "description": "Generic Mass Storage USB Device",
+                "serial_number": "D88F46AD7AA752D4"
+            }
+        }
+    },
+    {
+        "timestamp": "2025-11-09T13:34:54.727593",
+        "agentId": "sugumar",
+        "type": "usb_devices",
+        "data": {
+            "status": "ejected",
+            "device": {
+                "drive_letter": "E",
+                "vendor_id": "USBSTOR\\DISK&VEN_GENERIC&PROD_MASS_STORAGE&REV_1.99\\D88F46AD7AA752D4&0",
+                "product_id": "\\\\.\\PHYSICALDRIVE1",
+                "description": "Generic Mass Storage USB Device",
+                "serial_number": "D88F46AD7AA752D4"
+            }
+        }
+    },
+    {
+        "timestamp": "2025-11-09T16:01:33.866829",
+        "agentId": "sugumar",
+        "type": "system_info",
+        "data": {
+            "agent_id": "DESKTOP-FC89P9P",
+            "hostname": "DESKTOP-FC89P9P",
+            "os_type": "Windows",
+            "os_version": "10.0.26200",
+            "os_release": "11",
+            "cpu": {
+                "physical_cores": 8,
+                "logical_cores": 16,
+                "cpu_freq_mhz": 2901.0
+            },
+            "memory": {
+                "total_ram": 7968243712,
+                "available_ram": 865845248,
+                "used_ram": 7102398464,
+                "ram_percent": 89.1
+            },
+            "disk": {
+                "C:\\": {
+                    "mountpoint": "C:\\",
+                    "fstype": "NTFS",
+                    "total": 275158921216,
+                    "used": 268110954496,
+                    "free": 7047966720,
+                    "percent": 97.4
+                },
+                "D:\\": {
+                    "mountpoint": "D:\\",
+                    "fstype": "NTFS",
+                    "total": 236013481984,
+                    "used": 226869334016,
+                    "free": 9144147968,
+                    "percent": 96.1
+                }
+            },
+            "users": [
+                "Jayanth K"
+            ],
+            "machine_id": "244416032970936",
+            "wlan_info": [
+                {
+                    "interface_name": "WiFi",
+                    "type": "IPv4",
+                    "address": "10.83.143.206",
+                    "netmask": "255.255.255.0",
+                    "broadcast": null
+                }
+            ],
+            "ip": "10.83.143.206"
+        }
     }
 ]
