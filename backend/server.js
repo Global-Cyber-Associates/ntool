@@ -8,6 +8,7 @@ import { connectMongo } from "./db.js";
 import { saveAgentData } from "./save.js";
 import * as GetData from "./get.js";
 import { checkUsbStatus } from "./controllers/usbhandler.js";
+import usbRoutes from "./api/usb.js";
 
 const configPath = path.resolve("./config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -19,6 +20,8 @@ app.use(express.json());
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", ts: new Date().toISOString() })
 );
+
+app.use("/api/usb", usbRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
