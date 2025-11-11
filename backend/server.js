@@ -9,6 +9,8 @@ import { saveAgentData } from "./save.js";
 import * as GetData from "./get.js";
 import { checkUsbStatus } from "./controllers/usbhandler.js";
 import usbRoutes from "./api/usb.js";
+import visualizerDataRoute from "./api/visualizerData.js";
+import systemRoutes from "./api/system.js";
 
 import "./visualizer-script/visualizerScanner.js";
 
@@ -18,6 +20,9 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 const app = express();
 app.use(cors({ origin: config.cors_origin || "*" }));
 app.use(express.json());
+
+app.use("/api/visualizer-data", visualizerDataRoute);
+app.use("/api", systemRoutes);
 
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", ts: new Date().toISOString() })
