@@ -1,72 +1,136 @@
 import React, { useEffect, useState } from "react";
 import "./dashboard.css";
 import Sidebar from "../navigation/sidenav.jsx";
-import { fetchData } from "../../utils/socket.js";
 
 const Dashboard = () => {
   const [visualizerData, setVisualizerData] = useState([]);
   const [systemInfo, setSystemInfo] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Fetch all data from socket
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [vizRes, sysRes, logRes] = await Promise.all([
-        fetchData("visualizerData"),
-        fetchData("system_info"),
-        fetchData("system_logs"),
-      ]);
-
-      const latestVisualizer = Object.values(
-        (vizRes.data || []).reduce((acc, d) => {
-          if (
-            !acc[d.agentId] ||
-            new Date(d.createdAt) > new Date(acc[d.agentId].createdAt)
-          ) {
-            acc[d.agentId] = d;
-          }
-          return acc;
-        }, {})
-      );
-
-      setVisualizerData(latestVisualizer);
-      setSystemInfo(sysRes.data || []);
-      setLogs(logRes.data || []);
-    } catch (err) {
-      console.error("Socket fetch error:", err);
-    } finally {
-      setLoading(false);
+  // Helper: robust date parser for various API shapes
+  const parseDate = (v) => {
+    if (!v) return null;
+    // If v is an object like { $date: "ISO..." } or { "$date": { "$numberLong": "..." } }
+    if (typeof v === "object") {
+      if (v.$date) return new Date(v.$date);
+      if (v["$date"]) return new Date(v["$date"]);
+      if (v.$numberLong) return new Date(Number(v.$numberLong));
+      if (v["$numberLong"]) return new Date(Number(v["$numberLong"]));
     }
+    // fallback: string or number
+    return new Date(v);
+  };
+
+  // Helper: extract IP addresses from a system document (handles old and new shapes)
+  const getAgentIPs = (sys) => {
+    if (!sys) return [];
+    const data = sys.data || sys; // support both nested and flat shapes
+
+    // wlan_info may be an array of objects with address field
+    const wlanArray = Array.isArray(data.wlan_info)
+      ? data.wlan_info.map((w) => w.address).filter(Boolean)
+      : [];
+
+    // possible alternative fields
+    const ipCandidates = [
+      data.ip,
+      data.address,
+      // agent-level nested ip possibilities
+      data.wlan_ip?.[0]?.address,
+      // any single address found in wlan_info
+      ...(wlanArray || []),
+    ].filter(Boolean);
+
+    // Return unique IPs
+    return Array.from(new Set(ipCandidates));
   };
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 60000); // refresh every minute
-    return () => clearInterval(interval);
+    let mounted = true;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [vizRes, sysRes] = await Promise.all([
+          fetch("http://localhost:5000/api/visualizer-data"),
+          fetch("http://localhost:5000/api/system"),
+        ]);
+
+        if (!vizRes.ok || !sysRes.ok) {
+          throw new Error("Failed to fetch data from API");
+        }
+
+        const [vizRaw, sysRaw] = await Promise.all([vizRes.json(), sysRes.json()]);
+
+        // Defensive: normalize visualizer createdAt and ensure array
+        const vizData = Array.isArray(vizRaw) ? vizRaw : [];
+        // Group visualizer by latest per IP (handling createdAt.$date etc)
+        const latestVisualizer = Object.values(
+          vizData.reduce((acc, d) => {
+            const ip = d.ip;
+            if (!ip) return acc;
+            const existing = acc[ip];
+            const newDate = parseDate(d.createdAt || d.created_at || d.timestamp);
+            const existingDate = existing && parseDate(existing.createdAt || existing.created_at || existing.timestamp);
+            if (!existing || (newDate && existingDate && newDate > existingDate) || (newDate && !existingDate)) {
+              acc[ip] = d;
+            }
+            return acc;
+          }, {})
+        );
+
+        const systemArr = Array.isArray(sysRaw) ? sysRaw : [];
+
+        if (!mounted) return;
+        setVisualizerData(latestVisualizer);
+        setSystemInfo(systemArr);
+        setLastUpdated(new Date());
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // refresh every 60s
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  // KPI calculations
-  const activeAgents = visualizerData.filter(d =>
-    !d.noAgent && systemInfo.some(s => s.agentId === d.agentId)
-  );
+  // Build flattened agent IP list from systemInfo
+  const agentIPs = Array.from(new Set(systemInfo.flatMap((s) => getAgentIPs(s))));
 
-  const inactiveAgents = systemInfo.filter(
-    s => !visualizerData.some(d => d.agentId === s.agentId)
-  );
+  // Active agent devices — visualizer entries that are agents and match a system IP
+  const activeAgents = visualizerData.filter((d) => !d.noAgent && agentIPs.includes(d.ip));
 
-  const unmanagedDevices = visualizerData.filter(d => d.noAgent);
+  // Inactive agents — system docs which have at least one IP but none show up in visualizer
+  // NOTE: if a system doc has no IP candidates, we exclude it from inactive to avoid false positives
+  const inactiveAgents = systemInfo.filter((sys) => {
+    const ips = getAgentIPs(sys);
+    if (ips.length === 0) return false; // no ip -> don't mark inactive (avoid false positives)
+    return !ips.some((ip) => visualizerData.some((v) => v.ip === ip));
+  });
 
-  const logsToday = logs.filter(
-    l => new Date(l.timestamp).toDateString() === new Date().toDateString()
-  ).length;
+  // Unmanaged devices — devices found by visualizer that are flagged noAgent
+  const unmanagedDevices = visualizerData.filter((d) => d.noAgent === true);
+
+  // Helper to find system doc from an IP
+  const findSystemByIp = (ip) => systemInfo.find((s) => getAgentIPs(s).includes(ip));
 
   return (
     <div className="dashboard">
       <Sidebar />
       <div className="dashboard-container">
-        <h1 className="dashboard-title">Network & Device Overview</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h1 className="dashboard-title">Network & Device Overview</h1>
+          <div style={{ fontSize: "0.9rem", color: "#666" }}>
+            {lastUpdated ? `Last update: ${new Date(lastUpdated).toLocaleString()}` : "Not updated yet"}
+          </div>
+        </div>
 
         {loading ? (
           <p>Loading data...</p>
@@ -86,47 +150,48 @@ const Dashboard = () => {
                 <h2>Unmanaged Devices</h2>
                 <p>{unmanagedDevices.length}</p>
               </div>
-              <div className="stat-card blue">
-                <h2>Logs Today</h2>
-                <p>{logsToday}</p>
-              </div>
             </div>
 
-            {/* Active Agent Table */}
-            <div className="table-container">
-              <h2>Active Agent Devices</h2>
-              <table className="activity-table">
-                <thead>
-                  <tr>
-                    <th>Hostname</th>
-                    <th>IP</th>
-                    <th>CPU Cores</th>
-                    <th>RAM Usage</th>
-                    <th>OS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeAgents.map(d => {
-                    const sys = systemInfo.find(s => s.agentId === d.agentId);
-                    return (
-                      <tr key={d.agentId}>
-                        <td>{sys?.hostname || "-"}</td>
-                        <td>{d.ip}</td>
-                        <td>{sys?.cpu?.logical_cores || "-"}</td>
-                        <td>
-                          {sys?.memory?.ram_percent
-                            ? sys.memory.ram_percent + "%"
-                            : "-"}
-                        </td>
-                        <td>
-                          {sys?.os_type} {sys?.os_release}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+           {/* Active Agent Table */}
+<div className="table-container">
+  <h2>Active Agent Devices</h2>
+  <table className="activity-table">
+    <thead>
+      <tr>
+        <th>Agent ID</th>
+        <th>Hostname</th>
+        <th>IP</th>
+        <th>CPU Cores</th>
+        <th>RAM Usage</th>
+        <th>OS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {activeAgents.map((d) => {
+        const sys = findSystemByIp(d.ip);
+        const sdata = sys?.data || sys || {};
+        return (
+          <tr key={d.ip}>
+            {/* ✅ use top-level sys.agentId only */}
+            <td>{sys?.agentId || "-"}</td>
+            <td>{sdata.hostname || "-"}</td>
+            <td>{d.ip}</td>
+            <td>{sdata.cpu?.logical_cores ?? sdata.cpu?.physical_cores ?? "-"}</td>
+            <td>
+              {typeof sdata.memory?.ram_percent === "number"
+                ? `${sdata.memory.ram_percent}%`
+                : "-"}
+            </td>
+            <td>
+              {(sdata.os_type || "-") + " " + (sdata.os_release || "")}
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
+
 
             {/* Inactive Agent Table */}
             <div className="table-container">
@@ -141,16 +206,19 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {inactiveAgents.map(sys => (
-                    <tr key={sys.agentId}>
-                      <td>{sys.hostname}</td>
-                      <td>{sys.wlan_ip?.[0]?.address || "-"}</td>
-                      <td>
-                        {sys.os_type} {sys.os_release}
-                      </td>
-                      <td>{new Date(sys.collected_at).toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {inactiveAgents.map((sys) => {
+                    const sdata = sys.data || sys || {};
+                    const ips = getAgentIPs(sys);
+                    const lastSeenDate = parseDate(sys.data?.timestamp || sys.timestamp || sys.collected_at || sys.updatedAt);
+                    return (
+                      <tr key={sys._id?.$oid || sys._id || sdata.machine_id || ips.join(",")}>
+                        <td>{sdata.hostname || sdata.agent_id || "-"}</td>
+                        <td>{ips.join(", ") || "-"}</td>
+                        <td>{(sdata.os_type || sdata.data?.os_type || "-") + " " + (sdata.os_release || sdata.data?.os_release || "")}</td>
+                        <td>{lastSeenDate ? lastSeenDate.toLocaleString() : "-"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -167,13 +235,16 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {unmanagedDevices.map(d => (
-                    <tr key={d._id}>
-                      <td>{d.ip}</td>
-                      <td>{d.mac}</td>
-                      <td>{new Date(d.createdAt).toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {unmanagedDevices.map((d) => {
+                    const created = parseDate(d.createdAt || d.created_at || d.timestamp);
+                    return (
+                      <tr key={d._id?.$oid || d._id || d.ip}>
+                        <td>{d.ip}</td>
+                        <td>{d.mac || "-"}</td>
+                        <td>{created ? created.toLocaleString() : "-"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
