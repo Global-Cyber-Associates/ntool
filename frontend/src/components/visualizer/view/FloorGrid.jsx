@@ -8,16 +8,13 @@ export default function FloorGrid({ floor, updateDevices }) {
   const [gridSize, setGridSize] = useState(100);
   const [locked, setLocked] = useState(false);
   const [cols, setCols] = useState(5);
-  const [rows, setRows] = useState(3);
 
   useEffect(() => {
     const init = async () => {
-      // Wait for socket to connect
       if (!socket.connected) {
         await new Promise((resolve) => socket.once("connect", resolve));
       }
 
-      // Fetch initial devices once
       try {
         const res = await fetchData("visualizer_data");
         const data = res?.data || [];
@@ -31,7 +28,6 @@ export default function FloorGrid({ floor, updateDevices }) {
 
     init();
 
-    // Listen for real-time updates
     const handleUpdate = (deviceUpdate) => {
       setDevices((prev) => {
         const exists = prev.find((d) => d.id === deviceUpdate.id || d.ip === deviceUpdate.ip);
@@ -46,23 +42,33 @@ export default function FloorGrid({ floor, updateDevices }) {
     };
 
     socket.on("visualizer_update", handleUpdate);
+    return () => socket.off("visualizer_update", handleUpdate);
+  }, [cols]);
 
-    return () => {
-      socket.off("visualizer_update", handleUpdate);
-    };
-  }, [cols]); // only depend on cols if you want initial grid placement to respect it
+  // ✅ Improved router detection logic
+  const isRouterDevice = (ip) => {
+    if (!ip || ip === "N/A") return false;
+    return (
+      ip.endsWith(".0.1") ||
+      ip.endsWith(".1.1") ||
+      ip.endsWith(".254") ||
+      ip.endsWith(".1.254") ||
+      ip.endsWith(".0.254")
+    );
+  };
 
   const formatDevices = (data, colCount) => {
     return data.map((d, i) => {
       const ip = d.ip || "N/A";
-      const isRouter = ip.endsWith(".0.1") || ip.endsWith(".1.1");
+      const router = isRouterDevice(ip);
       return {
         id: d._id || d.id,
-        name: d.hostname || "Unknown",
+        name: router ? "Router" : d.agentId || "Unknown",
         ip,
         mac: d.mac || "Unknown",
         noAgent: d.noAgent,
-        icon: isRouter ? "🛜" : d.noAgent ? "🖥️" : "💻",
+        isRouter: router,
+        icon: router ? "🛜" : d.noAgent ? "🖥️" : "💻",
         x: (i % colCount) * 160 + 40,
         y: Math.floor(i / colCount) * 160 + 40,
       };
@@ -70,10 +76,9 @@ export default function FloorGrid({ floor, updateDevices }) {
   };
 
   const updatePosition = (id, x, y) => {
-    setDevices((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, x, y } : d))
-    );
-    updateDevices(devices);
+    const updatedDevices = devices.map((d) => (d.id === id ? { ...d, x, y } : d));
+    setDevices(updatedDevices);
+    updateDevices(updatedDevices);
     socket.emit("update_device_position", { id, x, y });
   };
 
@@ -94,17 +99,6 @@ export default function FloorGrid({ floor, updateDevices }) {
             onChange={(e) => setCols(Number(e.target.value))}
           />
         </label>
-
-        {/* <label className="V-grid-label">
-          Rows:
-          <input
-            type="number"
-            min="1"
-            max="10"
-            value={rows}
-            onChange={(e) => setRows(Number(e.target.value))}
-          />
-        </label> */}
       </div>
 
       <div className="V-grid" style={{ backgroundSize: `${gridSize}px ${gridSize}px` }}>
@@ -112,16 +106,21 @@ export default function FloorGrid({ floor, updateDevices }) {
           <Rnd
             key={dev.id}
             bounds="parent"
-            size={{ width: gridSize * 0.8, height: gridSize * 0.8 }}
+            size={{
+              width: dev.isRouter ? gridSize * 1.1 : gridSize * 0.8,
+              height: dev.isRouter ? gridSize * 1.1 : gridSize * 0.8,
+            }}
             position={{ x: dev.x, y: dev.y }}
             disableDragging={locked}
             onDragStop={(e, d) => updatePosition(dev.id, d.x, d.y)}
           >
             <div
-              className={`V-device-box ${dev.noAgent ? "V-no-agent" : "V-active"}`}
-              title={`Hostname: ${dev.name}\nIP: ${dev.ip}\nMAC: ${dev.mac}\nAgent: ${
-                dev.noAgent ? "Not Installed" : "Active"
+              className={`V-device-box ${
+                dev.isRouter ? "V-router" : dev.noAgent ? "V-no-agent" : "V-active"
               }`}
+              title={`Type: ${
+                dev.isRouter ? "Router" : dev.noAgent ? "Unmanaged Device" : "Active Agent"
+              }\nHostname: ${dev.name}\nIP: ${dev.ip}\nMAC: ${dev.mac}`}
             >
               <span className="V-device-icon">{dev.icon}</span>
               <div className="V-device-name">{dev.name}</div>
