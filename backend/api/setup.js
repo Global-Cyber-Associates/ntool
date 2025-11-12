@@ -1,42 +1,49 @@
+import express from "express";
+import fs from "fs";
+import path from "path";
+import bcrypt from "bcrypt";
+import User from "../models/User.js";
+import { connectMongo } from "../db.js";
+// import { reloadServer } from "../server.js";  // ✅ add this import
 
-/* ----------------------- SETUP ROUTES ----------------------- */
+const router = express.Router();
+const CONFIG_PATH = path.resolve("./config.json");
 
+router.post("/", async (req, res) => {
+  const { mongoURI, username, password, confirmPassword } = req.body;
 
+  if (!mongoURI || !username || !password || !confirmPassword)
+    return res.status(400).json({ success: false, message: "All fields are required." });
 
-// ✅ First-time setup route: saves Mongo URI + admin user
-app.post("/api/setup", async (req, res) => {
-  const { mongoURI, adminUsername, adminPassword } = req.body;
-
-  if (!mongoURI || !adminUsername || !adminPassword) {
-    return res.status(400).json({ message: "All fields are required" });
-  }
+  if (password !== confirmPassword)
+    return res.status(400).json({ success: false, message: "Passwords do not match." });
 
   try {
-    // 1. Save config.json
-    fs.writeFileSync(
-      CONFIG_PATH,
-      JSON.stringify({ mongoURI }, null, 2),
-      "utf-8"
-    );
+    // ✅ Connect to MongoDB
+    await connectMongo(mongoURI);
 
-    // 2. Connect to DB
-    await connectToDB(mongoURI);
-
-    // 3. Check if admin exists, else create
-    const existing = await User.findOne({ username: adminUsername });
-    if (!existing) {
-      const passwordHash = await bcrypt.hash(adminPassword, 10);
-      const newAdmin = new User({
-        username: adminUsername,
-        password: passwordHash,
-      });
-      await newAdmin.save();
-      console.log("✅ Admin user created:", adminUsername);
+    // ✅ Create admin user if not exists
+    const existingUser = await User.findOne({ username });
+    if (!existingUser) {
+      const hashed = await bcrypt.hash(password, 10);
+      await User.create({ username, password: hashed });
     }
 
-    res.json({ message: "Setup complete" });
+    // ✅ Save config file
+    const config = { mongo_uri: mongoURI, socket_port: 5000 };
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+
+    console.log("✅ Setup completed and config saved.");
+
+    // ✅ Reload the socket + DB connection live (no restart needed)
+    // await reloadServer();
+
+    res.json({ success: true, message: "Setup complete." });
+    
   } catch (err) {
-    console.error("Setup error:", err.message);
-    res.status(500).json({ message: "Setup failed" });
+    console.error("❌ Setup error:", err);
+    res.status(500).json({ success: false, message: "Setup failed: " + err.message });
   }
 });
+
+export default router;

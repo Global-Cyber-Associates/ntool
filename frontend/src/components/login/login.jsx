@@ -1,77 +1,80 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "./login.css";
+import axios from "axios";
+import "./login.css"; // optional — include if you already have a style file
 
-const backendUrl = import.meta.env.VITE_BACKEND_URL;
-
-function Login({ onLogin }) {
+const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
 
     try {
-const response = await fetch(`${backendUrl}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      const response = await axios.post(
+        "http://localhost:5000/api/auth/login",
+        {
+          username,
+          password,
+        }
+      );
 
-      if (!response.ok) {
-        alert("Invalid credentials");
-        return;
+      if (response.data.token) {
+        // ✅ Save token
+        sessionStorage.setItem("jwt", response.data.token);
+
+        // ✅ Notify App.jsx to re-render route
+        window.dispatchEvent(new Event("storage"));
+
+        // ✅ Navigate to dashboard (or "/")
+        navigate("/");
+      } else {
+        setError("Login failed. Please check your username/password.");
       }
-
-      const data = await response.json();
-
-      // Save token in localStorage
-      localStorage.setItem("token", data.token);
-
-      // Notify App
-      if (onLogin) onLogin(username);
-
-      // Navigate to dashboard
-      navigate("/");
     } catch (err) {
       console.error("Login error:", err);
-      alert("Server error, check console.");
+      setError("Login failed. Please check your username/password.");
     }
   };
 
   return (
     <div className="login-container">
-      <div className="login-box">
-        <h2 className="login-title">Control Panel Login</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              required
-            />
-          </div>
-          <button type="submit" className="login-btn">
-            Login
-          </button>
-        </form>
-      </div>
+      <h2>Login</h2>
+
+      <form onSubmit={handleLogin} className="login-form">
+        <div className="form-group">
+          <label>Username</label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter your username"
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+          />
+        </div>
+
+        {error && <p className="error-text">{error}</p>}
+
+        <button type="submit" className="login-btn">
+          Login
+        </button>
+      </form>
     </div>
   );
-}
+};
 
 export default Login;

@@ -1,117 +1,219 @@
+// backend/server.js
 import express from "express";
 import http from "http";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import dotenv from "dotenv";
 import { Server } from "socket.io";
 import { connectMongo } from "./db.js";
 import { saveAgentData } from "./save.js";
 import * as GetData from "./get.js";
 import { checkUsbStatus } from "./controllers/usbhandler.js";
 import usbRoutes from "./api/usb.js";
-
+import loginRoutes from "./api/login.js";
+import setupRoutes from "./api/setup.js";
 import "./visualizer-script/visualizerScanner.js";
 
+dotenv.config();
 
-const configPath = path.resolve("./config.json");
-const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const CONFIG_PATH = path.resolve("./config.json");
+let config = fs.existsSync(CONFIG_PATH)
+  ? JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"))
+  : {};
+
+console.log("🔍 Loaded config:", config);
 
 const app = express();
 app.use(cors({ origin: config.cors_origin || "*" }));
 app.use(express.json());
 
+// ✅ Health check
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", ts: new Date().toISOString() })
 );
 
+// ✅ API routes
+app.use("/api/setup", setupRoutes);
+app.use("/api/auth", loginRoutes);
 app.use("/api/usb", usbRoutes);
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: config.cors_origin || "*", methods: ["GET", "POST"] },
-  pingTimeout: 20000,
-  pingInterval: 5000,
+// ✅ Check if setup is complete (used by frontend)
+app.get("/api/check-setup", (_req, res) => {
+  try {
+    const isConfigured = !!(config.mongo_uri && config.mongo_uri.trim() !== "");
+    res.json({ setupComplete: isConfigured });
+  } catch (err) {
+    console.error("Error checking setup:", err);
+    res.status(500).json({ setupComplete: false });
+  }
 });
 
-// Log path for all agent data
 const logPath = path.join(process.cwd(), "agent_data_log.json");
 
-io.on("connection", (socket) => {
-  const ip = socket.handshake.headers["x-forwarded-for"]?.split(",")[0] || socket.handshake.address || "unknown";
-  console.log(`🔌 Agent connected: ${socket.id} (${ip})`);
+let io;
+let server;
 
-  socket.on("agent_data", async (payload) => {
-    try {
-      if (!payload?.type || !payload?.data || !payload?.agentId) {
-        socket.emit("agent_response", { success: false, message: "Invalid payload format" });
-        return;
-      }
+// ===================================================
+// 🔌 SOCKET.IO INITIALIZER
+// ===================================================
+function initializeSocketServer() {
+  io = new Server(server, {
+    cors: { origin: config.cors_origin || "*", methods: ["GET", "POST"] },
+    pingTimeout: 20000,
+    pingInterval: 5000,
+  });
 
-      payload.ip = ip;
+  io.on("connection", (socket) => {
+    const ip =
+      socket.handshake.headers["x-forwarded-for"]?.split(",")[0] ||
+      socket.handshake.address ||
+      "unknown";
+    console.log(`🔌 Agent connected: ${socket.id} (${ip})`);
 
-      // --- Log all received data ---
+    socket.on("agent_data", async (payload) => {
       try {
-        const logs = fs.existsSync(logPath) ? JSON.parse(fs.readFileSync(logPath, "utf-8")) : [];
-        logs.push({ timestamp: new Date().toISOString(), payload });
-        fs.writeFileSync(logPath, JSON.stringify(logs, null, 2), "utf-8");
+        if (!payload?.type || !payload?.data || !payload?.agentId) {
+          socket.emit("agent_response", { success: false, message: "Invalid payload format" });
+          return;
+        }
+
+        payload.ip = ip;
+
+        // 🧾 Log all received data
+        try {
+          const logs = fs.existsSync(logPath)
+            ? JSON.parse(fs.readFileSync(logPath, "utf-8"))
+            : [];
+          logs.push({ timestamp: new Date().toISOString(), payload });
+          fs.writeFileSync(logPath, JSON.stringify(logs, null, 2), "utf-8");
+        } catch (err) {
+          console.error("❌ Failed to log agent data:", err);
+        }
+
+        console.log(`[📦] Received ${payload.type} from agent ${payload.agentId} (${ip})`);
+
+        // 🔹 Handle USB devices
+        if (payload.type === "usb_devices") {
+          const connectedDevices = payload.data.connected_devices || [];
+          console.log("[🔹] Connected devices received:", connectedDevices);
+
+          const devicesWithStatus = await checkUsbStatus(payload.agentId, connectedDevices);
+          socket.emit("usb_validation", { devices: devicesWithStatus });
+          console.log("[✅] USB statuses sent to agent:", devicesWithStatus);
+          return;
+        }
+
+        // 💾 Save agent data
+        await saveAgentData(payload);
+        socket.emit("agent_response", { success: true, message: `${payload.type} saved successfully` });
       } catch (err) {
-        console.error("❌ Failed to log agent data:", err);
+        console.error("❌ Error handling agent data:", err);
+        socket.emit("agent_response", {
+          success: false,
+          message: "Failed to save agent data",
+          error: err.message,
+        });
       }
+    });
 
-      console.log(`[📦] Received ${payload.type} from agent ${payload.agentId} (${ip})`);
-
-      // USB devices handled exclusively here
-      if (payload.type === "usb_devices") {
-        const connectedDevices = payload.data.connected_devices || [];
-        console.log("[🔹] Connected devices received:", connectedDevices);
-
-        // --- Check USB statuses using usbhandler.js ---
-        const devicesWithStatus = await checkUsbStatus(payload.agentId, connectedDevices);
-
-        // Send statuses back to agent
-        socket.emit("usb_validation", { devices: devicesWithStatus });
-
-        console.log("[✅] USB statuses sent to agent:", devicesWithStatus);
-        return; // Skip saveAgentData for USB devices
+    socket.on("get_data", async (params, callback) => {
+      try {
+        const result = await GetData.fetchData(params);
+        callback(result);
+      } catch (err) {
+        console.error("❌ Error fetching data:", err);
+        callback({ success: false, message: "Failed to fetch data", error: err.message, data: [] });
       }
+    });
 
-      // Save all other agent data types to DB
-      await saveAgentData(payload);
-      socket.emit("agent_response", { success: true, message: `${payload.type} saved successfully` });
-
-    } catch (err) {
-      console.error("❌ Error handling agent data:", err);
-      socket.emit("agent_response", { success: false, message: "Failed to save agent data", error: err.message });
-    }
+    socket.on("disconnect", (reason) => {
+      console.log(`⚠️ Agent disconnected: ${socket.id} (${reason})`);
+    });
   });
+}
 
-  socket.on("get_data", async (params, callback) => {
-    try {
-      const result = await GetData.fetchData(params);
-      callback(result);
-    } catch (err) {
-      console.error("❌ Error fetching data:", err);
-      callback({ success: false, message: "Failed to fetch data", error: err.message, data: [] });
-    }
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log(`⚠️ Agent disconnected: ${socket.id} (${reason})`);
-  });
-});
-
+// ===================================================
+// 🚀 START SERVER
+// ===================================================
 async function start() {
   try {
+    // ----------------------------
+    // 1️⃣ SETUP MODE
+    // ----------------------------
+    if (!config.mongo_uri) {
+      console.warn("⚠️ No Mongo URI found — entering SETUP MODE...");
+
+      const setupServer = http.createServer(app);
+      setupServer.listen(config.socket_port || 5000, "0.0.0.0", () => {
+        console.log(
+          `🛠️ Setup mode active — open http://localhost:${config.socket_port || 5000}/setup to configure`
+        );
+      });
+
+      // Watch for config.json updates
+      fs.watchFile(CONFIG_PATH, async () => {
+        try {
+          const updatedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+          if (updatedConfig.mongo_uri && updatedConfig.mongo_uri !== config.mongo_uri) {
+            console.log("🔁 Mongo URI added — reloading server...");
+
+            config = updatedConfig;
+
+            await connectMongo(config.mongo_uri);
+            console.log("✅ MongoDB connected after setup");
+
+            // Close setup server before switching
+            setupServer.close(() => {
+              console.log("♻️ Switching from setup mode to full backend...");
+
+              server = http.createServer(app);
+              initializeSocketServer();
+
+              server.listen(config.socket_port || 5000, "0.0.0.0", () => {
+                console.log(`🚀 Server running on port ${config.socket_port || 5000}`);
+              });
+            });
+          }
+        } catch (err) {
+          console.error("❌ Failed during reload check:", err);
+        }
+      });
+
+      return;
+    }
+
+    // ----------------------------
+    // 2️⃣ NORMAL MODE
+    // ----------------------------
     await connectMongo(config.mongo_uri);
     console.log("✅ MongoDB connected");
 
+    server = http.createServer(app);
+    initializeSocketServer();
+
     server.listen(config.socket_port || 5000, "0.0.0.0", () => {
-      console.log(`🚀 Socket server running on port ${config.socket_port || 5000}`);
+      console.log(`🚀 Server running on port ${config.socket_port || 5000}`);
     });
   } catch (err) {
     console.error("💥 Failed to start server:", err);
     process.exit(1);
   }
 }
+
+// ===================================================
+// 🔄 AUTO-RELOAD CONFIG WHEN SETUP FINISHES
+// ===================================================
+fs.watchFile(CONFIG_PATH, (curr, prev) => {
+  try {
+    const updatedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    if (updatedConfig.mongo_uri && updatedConfig.mongo_uri !== config.mongo_uri) {
+      config = updatedConfig;
+      console.log("🔄 Config updated in runtime — Mongo URI loaded.");
+    }
+  } catch (err) {
+    console.error("⚠️ Error reloading config:", err.message);
+  }
+});
 
 start();

@@ -1,49 +1,57 @@
+// backend/api/login.js
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 import User from "../models/User.js";
-import { addLog } from "../utils/logger.js";
 
 dotenv.config();
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
+const CONFIG_PATH = path.resolve("./config.json");
+const JWT_SECRET = process.env.JWT_SECRET || "temporary_secret_key";
 
-// ✅ POST /api/login 
-router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const clientIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-
+// ✅ Middleware to check setup completion
+router.use((req, res, next) => {
   try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    if (!config.mongo_uri) {
+      return res.status(400).json({ success: false, message: "Setup not complete" });
+    }
+    next();
+  } catch (err) {
+    console.error("❌ Config read error:", err);
+    res.status(500).json({ success: false, message: "Failed to read configuration" });
+  }
+});
+
+// ✅ POST /api/auth/login
+router.post("/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: "Username and password required" });
+    }
+
     const user = await User.findOne({ username });
-
     if (!user) {
-      await addLog("LOGIN_FAIL", "Invalid username", username, { ip: clientIp });
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      await addLog("LOGIN_FAIL", "Wrong password", username, { ip: clientIp });
-      return res.status(401).json({ message: "Invalid credentials" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ username: user.username }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: "2h" });
 
-    await addLog("LOGIN_SUCCESS", "User logged in successfully", username, {
-      ip: clientIp,
-    });
-
-    return res.json({ success: true, token });
+    console.log(`✅ ${username} logged in successfully.`);
+    res.json({ success: true, token });
   } catch (err) {
     console.error("❌ Login error:", err);
-    await addLog("LOGIN_ERROR", "Internal server error during login", username || "unknown", {
-      ip: clientIp,
-      error: err.message,
-    });
-    return res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
