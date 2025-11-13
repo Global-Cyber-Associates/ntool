@@ -10,10 +10,10 @@ const Sidebar = ({ onToggle }) => {
     { label: "Dashboard", path: "/" },
     { label: "Visualizer", path: "/visualizer" },
     { label: "Devices", path: "/devices" },
+    { label: "USB Control", path: "/usb" },
+    { label: "Scanner", path: "/scan" },
     { label: "Logs", path: "/logs" },
     { label: "Features", path: "/features" },
-    { label: "Scanner", path: "/scan" },
-    { label: "USB Control", path: "/usb" },
   ];
 
   useEffect(() => {
