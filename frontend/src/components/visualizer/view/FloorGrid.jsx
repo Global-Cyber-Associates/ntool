@@ -29,7 +29,7 @@ export default function FloorGrid({ floor, updateDevices }) {
     init();
 
     // 🔁 Auto-refresh every 5 seconds
-    const interval = setInterval(init, 5000);
+    const interval = setInterval(init, 1000);
 
     const handleUpdate = (deviceUpdate) => {
       setDevices((prev) => {

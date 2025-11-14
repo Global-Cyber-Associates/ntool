@@ -5,7 +5,7 @@ import Sidebar from "../navigation/sidenav.jsx";
 const Dashboard = () => {
   const [visualizerData, setVisualizerData] = useState([]);
   const [systemInfo, setSystemInfo] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const parseDate = (v) => {
@@ -39,7 +39,7 @@ const Dashboard = () => {
 
     const fetchData = async () => {
       try {
-        setLoading(true);
+        // setLoading(true);
         const [vizRes, sysRes] = await Promise.all([
           fetch("http://localhost:5000/api/visualizer-data"),
           fetch("http://localhost:5000/api/system"),
@@ -80,12 +80,12 @@ const Dashboard = () => {
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
-        if (mounted) setLoading(false);
+        // if (mounted) setLoading(false);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 1000);
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -107,7 +107,7 @@ const Dashboard = () => {
   const unmanagedDevices = visualizerData.filter((d) => d.noAgent === true);
 
   // ✅ Router detection — includes .1, .2, .250, .253, .254
-  const ROUTER_IP_ENDINGS = [1, 2, 250, 253, 254];
+  const ROUTER_IP_ENDINGS = [1, 250, 253, 254];
   const routers = unmanagedDevices.filter((d) => {
     if (!d.ip) return false;
     const lastOctet = Number(d.ip.split(".")[3]);
@@ -156,9 +156,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {loading ? (
-          <p>Loading data...</p>
-        ) : (
+        {  (
           <>
             {/* KPI Summary */}
             <div className="stats-grid">

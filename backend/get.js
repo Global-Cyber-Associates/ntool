@@ -1,7 +1,7 @@
 import Agent from "./models/Agent.js";
 import SystemInfo from "./models/SystemInfo.js";
 import InstalledApps from "./models/InstalledApps.js";
-import USBDevice from "./models/UsbDevices.js";
+import USBDevice from "./models/usbdevices.js";
 import PortScanData from "./models/PortScan.js";
 import TaskInfo from "./models/TaskInfo.js";
 import VisualizerData from "./models/VisualizerData.js"; // <-- imported

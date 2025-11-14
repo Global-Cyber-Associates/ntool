@@ -1,6 +1,6 @@
 // routes/usb.js
 import express from "express";
-import UsbDevice from "../models/UsbDevices.js";
+import UsbDevice from "../models/usbdevices.js";
 
 const router = express.Router();
 

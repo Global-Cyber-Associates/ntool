@@ -1,4 +1,4 @@
-import USBDevices from "../models/UsbDevices.js";
+import USBDevices from "../models/usbdevices.js";
 import fs from "fs";
 import path from "path";
 
