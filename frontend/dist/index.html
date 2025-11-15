@@ -5,10 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>network-visualization-tool</title>
-    <script type="module" crossorigin src="/assets/index-By7eVqGz.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B1h3OVI1.css">
+
+    <!-- Keep your CSS -->
+    <link rel="stylesheet" crossorigin href="./assets/index-DBGwF--Z.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+
+    <!-- 1) Set backend IP directly -->
+    <script>
+      window.__BACKEND_URL = "http://10.183.137.206:5000"; 
+    </script>
+
+    <!-- 2) Load built JS AFTER backend IP is set -->
+    <script type="module" crossorigin src="./assets/index-BEOXJJvw.js"></script>
   </body>
 </html>
